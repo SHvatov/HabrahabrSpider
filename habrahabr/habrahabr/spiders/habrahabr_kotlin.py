@@ -2,7 +2,7 @@ import csv
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Iterator, Any, Optional
+from typing import Iterator, Any, Optional, Set, Dict, List
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
@@ -18,8 +18,8 @@ class HabrahabrArticleData:
                    "Number of views", "Number of bookmarks"]
 
     link: str  # unique identifier of the article
-    tags: set[str]  # list of associated tags
-    hubs: set[str]  # list of associated hubs
+    tags: Set[str]  # list of associated tags
+    hubs: Set[str]  # list of associated hubs
 
     is_unique_user: bool  # whether this article is provided by a unique user or a company
     company: Optional[str]  # company which created this post
@@ -46,8 +46,8 @@ class HabrahabrKotlinSpider(Spider):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.__articles_data: list[HabrahabrArticleData] = list()
-        self.__total_pages_to_parse: int = self.__parse_total_pages_num()
+        self.__articles_data = list()
+        self.__total_pages_to_parse = self.__parse_total_pages_num()
         print(f"Total pages to pare: {self.__total_pages_to_parse}")
 
     @classmethod
@@ -60,7 +60,7 @@ class HabrahabrKotlinSpider(Spider):
         for page in range(1, self.__total_pages_to_parse):
             yield Request(HabrahabrKotlinSpider.__KOTLIN_HABR_BASE_URL + f"page{page}/")
 
-    def parse(self, response: Response, **kwargs: dict[Any]) -> None:
+    def parse(self, response: Response, **kwargs: Dict[Any, Any]) -> None:
         page = self.__retrieve_page_number_from_url(response.url)
         articles = self.__parse_articles(response.body)
         self.__articles_data.extend(articles)
@@ -76,7 +76,7 @@ class HabrahabrKotlinSpider(Spider):
             writer.writerows([list(el.__iter__()) for el in self.__articles_data])
 
     @staticmethod
-    def __parse_articles(body: str) -> list[HabrahabrArticleData]:
+    def __parse_articles(body: str) -> List[HabrahabrArticleData]:
         page = BeautifulSoup(body, "html.parser")
         links = page.find_all("a", class_="tm-article-snippet__readmore")
         parsed_articles = [HabrahabrKotlinSpider.__parse_article(link["href"]) for link in links]
@@ -142,7 +142,7 @@ class HabrahabrKotlinSpider(Spider):
                 f.write(page.prettify())
 
     @staticmethod
-    def __retrieve_numbers_from_str(string_with_numbers: str) -> list[int]:
+    def __retrieve_numbers_from_str(string_with_numbers: str) -> List[int]:
         s = re.sub(r"\D", " ", string_with_numbers)
         return [int(d) for d in s.split() if d.isdigit()]
 
