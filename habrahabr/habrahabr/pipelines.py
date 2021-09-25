@@ -6,7 +6,8 @@
 
 # useful for handling different item types with a single interface
 
-
+# noinspection PyMethodMayBeStatic
+# noinspection PyUnusedLocal
 class HabrahabrPipeline:
     def process_item(self, item, spider):
         return item
