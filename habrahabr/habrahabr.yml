@@ -1,2 +1,7 @@
 query:
   NFT
+dir:
+  csv:
+    D:\projects\scrapy-habr-parser\data\csv
+  txt:
+    D:\projects\scrapy-habr-parser\data\txt

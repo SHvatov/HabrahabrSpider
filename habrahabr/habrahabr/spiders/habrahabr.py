@@ -16,7 +16,7 @@ from scrapy.http import Response
 class HabrahabrArticleData:
     CSV_COLUMNS = ["Link", "Tags", "Hubs", "Unique user", "Company name", "Username",
                    "Number of comments", "Number of positive votes", "Number of negative votes",
-                   "Number of views", "Number of bookmarks", "Text of the article"]
+                   "Number of views", "Number of bookmarks"]
 
     link: str  # unique identifier of the article
     tags: Set[str]  # list of associated tags
@@ -32,13 +32,11 @@ class HabrahabrArticleData:
     views: int  # number of view
     bookmarks: int  # number of the people, who has bookmarked the article
 
-    text: str  # text of the article for the further analysis
-
     def __iter__(self):
         return [self.link, ",".join(self.tags), ",".join(self.hubs),
                 self.is_unique_user, self.company, self.user,
                 self.comments, self.positive_votes, self.negative_votes,
-                self.views, self.bookmarks, self.text]
+                self.views, self.bookmarks]
 
 
 class HabrahabrSpider(Spider):
@@ -46,6 +44,9 @@ class HabrahabrSpider(Spider):
     __HABR_SEARCH_QUERY: str = "ru/search"
     __PATH_TO_CONFIG_FILE: str = "D:\projects\scrapy-habr-parser\habrahabr\habrahabr.yml"
     __QUERY_CONFIG_PARAM: str = "query"
+    __DIR_CONFIG_PARAM: str = "dir"
+    __TXT_DIR_CONFIG_PARAM: str = "txt"
+    __CSV_DIR_CONFIG_PARAM: str = "csv"
     name: str = "habrahabr"
 
     def __init__(self, **kwargs):
@@ -53,7 +54,7 @@ class HabrahabrSpider(Spider):
 
         self.__articles_data = list()
         self.__config = yaml.safe_load(open(HabrahabrSpider.__PATH_TO_CONFIG_FILE))
-        self.__total_pages_to_parse = self.__parse_total_pages_num()
+        self.__total_pages_to_parse = self.__parse_total_pages_num(self.__get_url())
         print(f"Total pages to parse: {self.__total_pages_to_parse}")
 
     @classmethod
@@ -63,8 +64,8 @@ class HabrahabrSpider(Spider):
         return spider
 
     def start_requests(self) -> Iterator[str]:
-        # for page in range(1, self.__total_pages_to_parse):
-        for page in range(1, 2):
+        for page in range(1, self.__total_pages_to_parse + 1):
+            # for page in range(1, 2):
             yield Request(self.__get_url(page))
 
     def parse(self, response: Response, **kwargs: Dict[Any, Any]) -> None:
@@ -75,7 +76,7 @@ class HabrahabrSpider(Spider):
 
     # noinspection PyUnusedLocal
     def on_closed(self, spider: Spider):
-        filename = f"{HabrahabrSpider.name}-results-{datetime.today().strftime('%Y-%m-%d')}.csv"
+        filename = f"{self.__get_csv_dir()}/{HabrahabrSpider.name}-results-{datetime.today().strftime('%Y-%m-%d')}.csv"
         print(f"Writing {len(self.__articles_data)} records to csv file with name {filename}")
         with open(filename, 'w', encoding="UTF-8") as csv_file:
             writer = csv.writer(csv_file)
@@ -88,15 +89,19 @@ class HabrahabrSpider(Spider):
                f"page{page}/" \
                f"?q={self.__config[HabrahabrSpider.__QUERY_CONFIG_PARAM]}"
 
-    @staticmethod
-    def __parse_articles(body: str) -> List[HabrahabrArticleData]:
+    def __get_csv_dir(self) -> str:
+        return self.__config[HabrahabrSpider.__DIR_CONFIG_PARAM][HabrahabrSpider.__CSV_DIR_CONFIG_PARAM]
+
+    def __get_txt_dir(self) -> str:
+        return self.__config[HabrahabrSpider.__DIR_CONFIG_PARAM][HabrahabrSpider.__TXT_DIR_CONFIG_PARAM]
+
+    def __parse_articles(self, body: str) -> List[HabrahabrArticleData]:
         page = BeautifulSoup(body, "html.parser")
         links = page.find_all("a", class_="tm-article-snippet__readmore")
-        parsed_articles = [HabrahabrSpider.__parse_article(link["href"]) for link in links]
+        parsed_articles = [self.__parse_article(link["href"]) for link in links]
         return [el for el in parsed_articles if el is not None]
 
-    @staticmethod
-    def __parse_article(link: str) -> Optional[HabrahabrArticleData]:
+    def __parse_article(self, link: str) -> Optional[HabrahabrArticleData]:
         print(f"Started processing article with url: {link}")
         actual_url = HabrahabrSpider.__HABR_BASE_URL + link
         page = HabrahabrSpider.__open_page(actual_url)
@@ -138,14 +143,21 @@ class HabrahabrSpider(Spider):
                 views = int(views_str)
 
             bookmarks = int(page.find("span", class_="bookmarks-button__counter").string)
-            text = page.find("div", class_="article-formatted-body").get_text()
+            # noinspection PyArgumentList
+            text = page.find("div", class_="article-formatted-body").get_text(separator=" ", strip=True)
 
             data = HabrahabrArticleData(
                 link, tags, hubs,
                 is_unique_user, company, user,
                 comments, positive_votes, negative_votes,
-                views, bookmarks, text
+                views, bookmarks
             )
+
+            # save text to corresponding file
+            filename = f"{self.__get_txt_dir()}/{HabrahabrSpider.name}-text-{link.replace('/', '-')}.txt"
+            with open(filename, 'w', encoding="UTF-8") as txt_file:
+                txt_file.write(text)
+
             print(f"Processed article with url: {actual_url}. Parsed data: {data}")
             return data
         except Exception as ex:
@@ -178,8 +190,9 @@ class HabrahabrSpider(Spider):
             raise e
         return BeautifulSoup(page.read(), "html.parser")
 
-    def __parse_total_pages_num(self) -> int:
-        page = HabrahabrSpider.__open_page(self.__get_url())
+    @staticmethod
+    def __parse_total_pages_num(url: str) -> int:
+        page = HabrahabrSpider.__open_page(url)
         divs = page.find_all("a", class_="tm-pagination__page")
 
         max_page = -1
@@ -190,5 +203,4 @@ class HabrahabrSpider(Spider):
 
         if max_page != 1:
             return max_page
-        raise ValueError(f"Could not parse a total number of the pages "
-                         f"to process from {self.__get_url()}")
+        raise ValueError(f"Could not parse a total number of the pages to process from {url}")
