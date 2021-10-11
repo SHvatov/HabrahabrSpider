@@ -6,7 +6,6 @@ from typing import Iterator, Any, Optional, Set, Dict, List
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
-import yaml
 from bs4 import BeautifulSoup
 from scrapy import Spider, Request, signals
 from scrapy.http import Response
@@ -42,18 +41,26 @@ class HabrahabrArticleData:
 class HabrahabrSpider(Spider):
     __HABR_BASE_URL: str = "https://habr.com"
     __HABR_SEARCH_QUERY: str = "ru/search"
-    __PATH_TO_CONFIG_FILE: str = "D:\projects\scrapy-habr-parser\habrahabr\habrahabr.yml"
     __QUERY_CONFIG_PARAM: str = "query"
-    __DIR_CONFIG_PARAM: str = "dir"
-    __TXT_DIR_CONFIG_PARAM: str = "txt"
-    __CSV_DIR_CONFIG_PARAM: str = "csv"
+    __TXT_DIR_CONFIG_PARAM: str = "dir.txt"
+    __CSV_DIR_CONFIG_PARAM: str = "dir.csv"
+
     name: str = "habrahabr"
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
+        # acquire config data from arguments
+        if HabrahabrSpider.__QUERY_CONFIG_PARAM not in kwargs.keys():
+            raise ValueError("Mandatory \"query\" parameter is absent")
+
+        self.__query = str(kwargs[HabrahabrSpider.__QUERY_CONFIG_PARAM])
+        self.__path_to_txt_dir = str(kwargs[HabrahabrSpider.__TXT_DIR_CONFIG_PARAM]) \
+            if HabrahabrSpider.__TXT_DIR_CONFIG_PARAM in kwargs.keys() else None
+        self.__path_to_csv_dir = str(kwargs[HabrahabrSpider.__CSV_DIR_CONFIG_PARAM]) \
+            if HabrahabrSpider.__CSV_DIR_CONFIG_PARAM in kwargs.keys() else None
+
         self.__articles_data = list()
-        self.__config = yaml.safe_load(open(HabrahabrSpider.__PATH_TO_CONFIG_FILE))
         self.__total_pages_to_parse = self.__parse_total_pages_num(self.__get_url())
         print(f"Total pages to parse: {self.__total_pages_to_parse}")
 
@@ -64,8 +71,8 @@ class HabrahabrSpider(Spider):
         return spider
 
     def start_requests(self) -> Iterator[str]:
-        for page in range(1, self.__total_pages_to_parse + 1):
-            # for page in range(1, 2):
+        # for page in range(1, self.__total_pages_to_parse + 1):
+        for page in range(1, 2):
             yield Request(self.__get_url(page))
 
     def parse(self, response: Response, **kwargs: Dict[Any, Any]) -> None:
@@ -76,7 +83,12 @@ class HabrahabrSpider(Spider):
 
     # noinspection PyUnusedLocal
     def on_closed(self, spider: Spider):
-        filename = f"{self.__get_csv_dir()}/{HabrahabrSpider.name}-results-{datetime.today().strftime('%Y-%m-%d')}.csv"
+        # do not create csv file if no dir is provided
+        if self.__path_to_csv_dir is None:
+            return
+
+        filename = f"{self.__path_to_csv_dir}/" \
+                   f"{HabrahabrSpider.name}-results-{datetime.today().strftime('%Y-%m-%d')}.csv"
         print(f"Writing {len(self.__articles_data)} records to csv file with name {filename}")
         with open(filename, 'w', encoding="UTF-8") as csv_file:
             writer = csv.writer(csv_file)
@@ -87,13 +99,7 @@ class HabrahabrSpider(Spider):
         return f"{HabrahabrSpider.__HABR_BASE_URL}/" \
                f"{HabrahabrSpider.__HABR_SEARCH_QUERY}/" \
                f"page{page}/" \
-               f"?q={self.__config[HabrahabrSpider.__QUERY_CONFIG_PARAM]}"
-
-    def __get_csv_dir(self) -> str:
-        return self.__config[HabrahabrSpider.__DIR_CONFIG_PARAM][HabrahabrSpider.__CSV_DIR_CONFIG_PARAM]
-
-    def __get_txt_dir(self) -> str:
-        return self.__config[HabrahabrSpider.__DIR_CONFIG_PARAM][HabrahabrSpider.__TXT_DIR_CONFIG_PARAM]
+               f"?q={self.__query}"
 
     def __parse_articles(self, body: str) -> List[HabrahabrArticleData]:
         page = BeautifulSoup(body, "html.parser")
@@ -153,10 +159,11 @@ class HabrahabrSpider(Spider):
                 views, bookmarks
             )
 
-            # save text to corresponding file
-            filename = f"{self.__get_txt_dir()}/{HabrahabrSpider.name}-text-{link.replace('/', '-')}.txt"
-            with open(filename, 'w', encoding="UTF-8") as txt_file:
-                txt_file.write(text)
+            # save text to corresponding file if txt dir is provided
+            if self.__path_to_txt_dir is not None:
+                filename = f"{self.__path_to_txt_dir}/{HabrahabrSpider.name}-text-{link.replace('/', '-')}.txt"
+                with open(filename, 'w', encoding="UTF-8") as txt_file:
+                    txt_file.write(text)
 
             print(f"Processed article with url: {actual_url}. Parsed data: {data}")
             return data
