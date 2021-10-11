@@ -131,6 +131,9 @@ class GitHubTopicsSpider(Spider):
             created_by = additional_data[0] if len(additional_data) >= 1 else None
             release_date = additional_data[1] if len(additional_data) >= 2 else None
 
+            created_by = None if release_date is None else created_by
+            release_date = None if created_by is None else release_date
+
             repositories = self.__retrieve_numbers_from_str(
                 str(page.find("h2", class_="h3 color-text-secondary").contents[0])
             )
