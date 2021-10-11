@@ -1,1 +1,1 @@
- scrapy crawl habrahabr -a query=NFT -a dir.csv=D:/projects/scrapy-habr-parser/data/csv
+ scrapy crawl habrahabr-articles -a query=NFT -a dir=D:\projects\scrapy-habr-parser\data\habr

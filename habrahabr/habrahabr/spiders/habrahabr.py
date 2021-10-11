@@ -38,27 +38,31 @@ class HabrahabrArticleData:
                 self.views, self.bookmarks]
 
 
-class HabrahabrSpider(Spider):
-    __HABR_BASE_URL: str = "https://habr.com"
-    __HABR_SEARCH_QUERY: str = "ru/search"
-    __QUERY_CONFIG_PARAM: str = "query"
-    __TXT_DIR_CONFIG_PARAM: str = "dir.txt"
-    __CSV_DIR_CONFIG_PARAM: str = "dir.csv"
+# noinspection DuplicatedCode
+class HabrahabrArticlesSpider(Spider):
+    __BASE_URL: str = "https://habr.com"
+    __SEARCH_QUERY: str = "ru/search"
 
-    name: str = "habrahabr"
+    __QUERY_ARG: str = "query"
+    __DIR_ARG: str = "dir"
+
+    name: str = "habrahabr-articles"
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
         # acquire config data from arguments
-        if HabrahabrSpider.__QUERY_CONFIG_PARAM not in kwargs.keys():
+        if HabrahabrArticlesSpider.__QUERY_ARG not in kwargs.keys():
             raise ValueError("Mandatory \"query\" parameter is absent")
 
-        self.__query = str(kwargs[HabrahabrSpider.__QUERY_CONFIG_PARAM])
-        self.__path_to_txt_dir = str(kwargs[HabrahabrSpider.__TXT_DIR_CONFIG_PARAM]) \
-            if HabrahabrSpider.__TXT_DIR_CONFIG_PARAM in kwargs.keys() else None
-        self.__path_to_csv_dir = str(kwargs[HabrahabrSpider.__CSV_DIR_CONFIG_PARAM]) \
-            if HabrahabrSpider.__CSV_DIR_CONFIG_PARAM in kwargs.keys() else None
+        self.__query = str(kwargs[HabrahabrArticlesSpider.__QUERY_ARG])
+        self.__path_to_dir = str(kwargs[HabrahabrArticlesSpider.__DIR_ARG]) \
+            if HabrahabrArticlesSpider.__DIR_ARG in kwargs.keys() else None
+
+        if self.__path_to_dir is not None:
+            self.__path_to_txt_dir = f"{self.__path_to_dir}/txt"
+            self.__path_to_csv_dir = f"{self.__path_to_dir}/csv"
+            self.__path_to_failed_dir = f"{self.__path_to_dir}/failed"
 
         self.__articles_data = list()
         self.__total_pages_to_parse = self.__parse_total_pages_num(self.__get_url())
@@ -66,11 +70,11 @@ class HabrahabrSpider(Spider):
 
     @classmethod
     def from_crawler(cls, crawler, *args, **kwargs):
-        spider = super(HabrahabrSpider, cls).from_crawler(crawler, *args, **kwargs)
+        spider = super(HabrahabrArticlesSpider, cls).from_crawler(crawler, *args, **kwargs)
         crawler.signals.connect(spider.on_closed, signal=signals.spider_closed)
         return spider
 
-    def start_requests(self) -> Iterator[str]:
+    def start_requests(self) -> Iterator[Request]:
         # for page in range(1, self.__total_pages_to_parse + 1):
         for page in range(1, 2):
             yield Request(self.__get_url(page))
@@ -88,7 +92,7 @@ class HabrahabrSpider(Spider):
             return
 
         filename = f"{self.__path_to_csv_dir}/" \
-                   f"{HabrahabrSpider.name}-results-{datetime.today().strftime('%Y-%m-%d')}.csv"
+                   f"{HabrahabrArticlesSpider.name}-results-{datetime.today().strftime('%Y-%m-%d')}.csv"
         print(f"Writing {len(self.__articles_data)} records to csv file with name {filename}")
         with open(filename, 'w', encoding="UTF-8") as csv_file:
             writer = csv.writer(csv_file)
@@ -96,8 +100,8 @@ class HabrahabrSpider(Spider):
             writer.writerows([list(el.__iter__()) for el in self.__articles_data])
 
     def __get_url(self, page: int = 1) -> str:
-        return f"{HabrahabrSpider.__HABR_BASE_URL}/" \
-               f"{HabrahabrSpider.__HABR_SEARCH_QUERY}/" \
+        return f"{HabrahabrArticlesSpider.__BASE_URL}/" \
+               f"{HabrahabrArticlesSpider.__SEARCH_QUERY}/" \
                f"page{page}/" \
                f"?q={self.__query}"
 
@@ -109,8 +113,8 @@ class HabrahabrSpider(Spider):
 
     def __parse_article(self, link: str) -> Optional[HabrahabrArticleData]:
         print(f"Started processing article with url: {link}")
-        actual_url = HabrahabrSpider.__HABR_BASE_URL + link
-        page = HabrahabrSpider.__open_page(actual_url)
+        actual_url = HabrahabrArticlesSpider.__BASE_URL + link
+        page = HabrahabrArticlesSpider.__open_page(actual_url)
 
         try:
             # parsing links from the page
@@ -130,13 +134,14 @@ class HabrahabrSpider(Spider):
 
             # parsing different stats
             comments = page.find("span", class_="tm-article-comments-counter-link__value").string
-            comments = HabrahabrSpider.__retrieve_numbers_from_str(comments)[0]
+            comments = HabrahabrArticlesSpider.__retrieve_numbers_from_str(comments)[0]
 
             # parsing number of votes
             total_votes = page.find("span", class_="tm-votes-meter__value_medium")
             if "title" in total_votes.contents:
                 total_votes_title = total_votes["title"]
-                _, positive_votes, negative_votes = HabrahabrSpider.__retrieve_numbers_from_str(total_votes_title)
+                _, positive_votes, negative_votes = HabrahabrArticlesSpider.__retrieve_numbers_from_str(
+                    total_votes_title)
             else:
                 positive_votes = negative_votes = 0
 
@@ -161,7 +166,7 @@ class HabrahabrSpider(Spider):
 
             # save text to corresponding file if txt dir is provided
             if self.__path_to_txt_dir is not None:
-                filename = f"{self.__path_to_txt_dir}/{HabrahabrSpider.name}-text-{link.replace('/', '-')}.txt"
+                filename = f"{self.__path_to_txt_dir}/{HabrahabrArticlesSpider.name}-text-{link.replace('/', '-')}.txt"
                 with open(filename, 'w', encoding="UTF-8") as txt_file:
                     txt_file.write(text)
 
@@ -169,10 +174,13 @@ class HabrahabrSpider(Spider):
             return data
         except Exception as ex:
             print(f"Encountered following exception ({ex.__class__}) when attempting to parse data: {ex}")
-            filename = f"{HabrahabrSpider.name}-failed-{link.replace('/', '-')}.html"
-            print(f"Saving failed to parse html to {filename}")
-            with open(filename, 'w', encoding="UTF-8") as f:
-                f.write(page.prettify())
+            if self.__path_to_failed_dir is not None:
+                filename = f"{self.__path_to_failed_dir}/" \
+                           f"{HabrahabrArticlesSpider.name}-failed-{link.replace('/', '-')}.html"
+                print(f"Saving failed to parse html to {filename}")
+                with open(filename, 'w', encoding="UTF-8") as f:
+                    f.write(page.prettify())
+            return None
 
     @staticmethod
     def __retrieve_numbers_from_str(string_with_numbers: str) -> List[int]:
@@ -199,14 +207,14 @@ class HabrahabrSpider(Spider):
 
     @staticmethod
     def __parse_total_pages_num(url: str) -> int:
-        page = HabrahabrSpider.__open_page(url)
+        page = HabrahabrArticlesSpider.__open_page(url)
         divs = page.find_all("a", class_="tm-pagination__page")
 
         max_page = -1
         for div in divs:
-            page = int(div.contents[0])
-            if page > max_page:
-                max_page = page
+            actual_page = int(div.contents[0])
+            if actual_page > max_page:
+                max_page = actual_page
 
         if max_page != 1:
             return max_page
