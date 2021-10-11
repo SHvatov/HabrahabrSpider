@@ -34,7 +34,9 @@ def process_dir() -> None:
     print(f"Extracted personalities: {counter.most_common(30)}")
 
     # required to build word cloud
-    print(', '.join([_.fullname for _ in personalities]))
+    print('; '.join([_.fullname for _ in personalities]), end='\n\n')
+    for p, c in counter.items():
+        print(f'{p.fullname};{c}')
 
 
 if __name__ == '__main__':
