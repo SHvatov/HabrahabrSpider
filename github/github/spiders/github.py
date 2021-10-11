@@ -125,9 +125,11 @@ class GitHubTopicsSpider(Spider):
             side_bar = page.find("div", class_="col-md-4 col-lg-3")
             additional_data = side_bar.find_all("p", class_="mb-1")
             additional_data = [
-                str(_.contents[2]).strip().replace('\"', '') if len(_) >= 3 else None
+                str(_.contents[2]).strip().replace('\"', '') if len(_.contents) >= 3 else None
                 for _ in additional_data
             ]
+            created_by = additional_data[0] if len(additional_data) >= 1 else None
+            release_date = additional_data[1] if len(additional_data) >= 2 else None
 
             repositories = self.__retrieve_numbers_from_str(
                 str(page.find("h2", class_="h3 color-text-secondary").contents[0])
@@ -138,7 +140,7 @@ class GitHubTopicsSpider(Spider):
                 repositories = repositories[0]
 
             data = GitHubTechnologyData(link, self.__query, technology,
-                                        additional_data[0], additional_data[1], repositories)
+                                        created_by, release_date, repositories)
             print(f"Processed technology with url: {actual_url}. Parsed data: {data}")
             return data
         except Exception as ex:
