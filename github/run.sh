@@ -1,1 +1,0 @@
-scrapy crawl github-topics -a query=JavaScript -a dir=D:\projects\scrapy-habr-parser\data\github

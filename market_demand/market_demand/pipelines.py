@@ -7,6 +7,6 @@
 # useful for handling different item types with a single interface
 
 
-class GithubPipeline:
+class MarketDemandPipeline:
     def process_item(self, item, spider):
         return item

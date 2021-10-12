@@ -1,1 +1,0 @@
- scrapy crawl habrahabr-articles -a query=NFT -a dir=D:\projects\scrapy-habr-parser\data\habr

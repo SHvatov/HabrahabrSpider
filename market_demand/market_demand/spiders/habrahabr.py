@@ -42,9 +42,11 @@ class HabrahabrArticleData:
 class HabrahabrArticlesSpider(Spider):
     __BASE_URL: str = "https://habr.com"
     __SEARCH_QUERY: str = "ru/search"
+    __MAX_PAGES_TO_CRAWL = 1
 
     __QUERY_ARG: str = "query"
     __DIR_ARG: str = "dir"
+    __SAVE_TEXT: str = "save.text"
 
     name: str = "habrahabr-articles"
 
@@ -64,9 +66,14 @@ class HabrahabrArticlesSpider(Spider):
             self.__path_to_csv_dir = f"{self.__path_to_dir}/csv"
             self.__path_to_failed_dir = f"{self.__path_to_dir}/failed"
 
+        self.__save_text = bool(kwargs[HabrahabrArticlesSpider.__SAVE_TEXT]) \
+            if HabrahabrArticlesSpider.__SAVE_TEXT in kwargs.keys() else False
+
         self.__articles_data = list()
         self.__total_pages_to_parse = self.__parse_total_pages_num(self.__get_url())
-        print(f"Total pages to parse: {self.__total_pages_to_parse}")
+        if self.__total_pages_to_parse > HabrahabrArticlesSpider.__MAX_PAGES_TO_CRAWL:
+            self.__total_pages_to_parse = HabrahabrArticlesSpider.__MAX_PAGES_TO_CRAWL
+        print(f"LOG: Total pages to parse: {self.__total_pages_to_parse}")
 
     @classmethod
     def from_crawler(cls, crawler, *args, **kwargs):
@@ -75,15 +82,14 @@ class HabrahabrArticlesSpider(Spider):
         return spider
 
     def start_requests(self) -> Iterator[Request]:
-        # for page in range(1, self.__total_pages_to_parse + 1):
-        for page in range(1, 2):
+        for page in range(1, self.__total_pages_to_parse + 1):
             yield Request(self.__get_url(page))
 
     def parse(self, response: Response, **kwargs: Dict[Any, Any]) -> None:
         page = self.__retrieve_page_number_from_url(response.url)
         articles = self.__parse_articles(response.body)
         self.__articles_data.extend(articles)
-        print(f"Processed page #{page}, added {len(articles)} articles. Total is {len(self.__articles_data)}")
+        print(f"LOG: Processed page #{page}, added {len(articles)} articles. Total is {len(self.__articles_data)}")
 
     # noinspection PyUnusedLocal
     def on_closed(self, spider: Spider):
@@ -92,8 +98,9 @@ class HabrahabrArticlesSpider(Spider):
             return
 
         filename = f"{self.__path_to_csv_dir}/" \
-                   f"{HabrahabrArticlesSpider.name}-results-{datetime.today().strftime('%Y-%m-%d')}.csv"
-        print(f"Writing {len(self.__articles_data)} records to csv file with name {filename}")
+                   f"{HabrahabrArticlesSpider.name}-" \
+                   f"{self.__query}-results-{datetime.today().strftime('%Y-%m-%d')}.csv"
+        print(f"LOG: Writing {len(self.__articles_data)} records to csv file with name {filename}")
         with open(filename, 'w', encoding="UTF-8") as csv_file:
             writer = csv.writer(csv_file)
             writer.writerow(HabrahabrArticleData.CSV_COLUMNS)
@@ -112,20 +119,21 @@ class HabrahabrArticlesSpider(Spider):
         return [el for el in parsed_articles if el is not None]
 
     def __parse_article(self, link: str) -> Optional[HabrahabrArticleData]:
-        print(f"Started processing article with url: {link}")
+        print(f"LOG: Started processing article with url: {link}")
         actual_url = HabrahabrArticlesSpider.__BASE_URL + link
-        page = HabrahabrArticlesSpider.__open_page(actual_url)
+        page = self.__open_page(actual_url)
 
         try:
             # parsing links from the page
-            tags, hubs = list(), list()
-            for link_item in page.find_all("a", class_="tm-article-body__tags-item-link"):
+            tags = set()
+            for link_item in page.find_all("a", class_="tm-tags-list__link"):
                 link_item_name = str(link_item.string).strip()
-                if str(link_item["href"]).count("ru/hub") != 0:
-                    hubs.append(link_item_name)
-                else:
-                    tags.append(link_item_name)
-            tags, hubs = set(tags), set(hubs)
+                tags.add(link_item_name)
+
+            hubs = set()
+            for link_item in page.find_all("a", class_="tm-hubs-list__link"):
+                link_item_name = str(link_item.string).strip()
+                hubs.add(link_item_name)
 
             # parsing user data
             is_unique_user = link.count("ru/company") == 0
@@ -134,13 +142,13 @@ class HabrahabrArticlesSpider(Spider):
 
             # parsing different stats
             comments = page.find("span", class_="tm-article-comments-counter-link__value").string
-            comments = HabrahabrArticlesSpider.__retrieve_numbers_from_str(comments)[0]
+            comments = self.__retrieve_numbers_from_str(comments)[0]
 
             # parsing number of votes
-            total_votes = page.find("span", class_="tm-votes-meter__value_medium")
-            if "title" in total_votes.contents:
+            total_votes = page.find("span", class_="tm-votes-meter__value")
+            if total_votes.has_attr("title"):
                 total_votes_title = total_votes["title"]
-                _, positive_votes, negative_votes = HabrahabrArticlesSpider.__retrieve_numbers_from_str(
+                _, positive_votes, negative_votes = self.__retrieve_numbers_from_str(
                     total_votes_title)
             else:
                 positive_votes = negative_votes = 0
@@ -154,9 +162,6 @@ class HabrahabrArticlesSpider(Spider):
                 views = int(views_str)
 
             bookmarks = int(page.find("span", class_="bookmarks-button__counter").string)
-            # noinspection PyArgumentList
-            text = page.find("div", class_="article-formatted-body").get_text(separator=" ", strip=True)
-
             data = HabrahabrArticleData(
                 link, tags, hubs,
                 is_unique_user, company, user,
@@ -164,20 +169,24 @@ class HabrahabrArticlesSpider(Spider):
                 views, bookmarks
             )
 
-            # save text to corresponding file if txt dir is provided
-            if self.__path_to_txt_dir is not None:
-                filename = f"{self.__path_to_txt_dir}/{HabrahabrArticlesSpider.name}-text-{link.replace('/', '-')}.txt"
-                with open(filename, 'w', encoding="UTF-8") as txt_file:
-                    txt_file.write(text)
+            # save text to corresponding file if flag is set to true
+            if self.__save_text:
+                # noinspection PyArgumentList
+                text = page.find("div", class_="article-formatted-body").get_text(separator=" ", strip=True)
+                if self.__path_to_txt_dir is not None:
+                    filename = f"{self.__path_to_txt_dir}/" \
+                               f"{HabrahabrArticlesSpider.name}-text-{link.replace('/', '-')}.txt"
+                    with open(filename, 'w', encoding="UTF-8") as txt_file:
+                        txt_file.write(text)
 
-            print(f"Processed article with url: {actual_url}. Parsed data: {data}")
+            print(f"LOG: Processed article with url: {actual_url}. Parsed data: {data}")
             return data
         except Exception as ex:
-            print(f"Encountered following exception ({ex.__class__}) when attempting to parse data: {ex}")
+            print(f"LOG: Encountered following exception ({ex.__class__}) when attempting to parse data: {ex}")
             if self.__path_to_failed_dir is not None:
                 filename = f"{self.__path_to_failed_dir}/" \
                            f"{HabrahabrArticlesSpider.name}-failed-{link.replace('/', '-')}.html"
-                print(f"Saving failed to parse html to {filename}")
+                print(f"LOG: Saving failed to parse html to {filename}")
                 with open(filename, 'w', encoding="UTF-8") as f:
                     f.write(page.prettify())
             return None
@@ -196,11 +205,11 @@ class HabrahabrArticlesSpider(Spider):
         try:
             page = urlopen(url)
         except HTTPError as e:
-            print(f"Server returned the following HTTP error code while "
+            print(f"LOG: Server returned the following HTTP error code while "
                   f"performing a request to {e.url}: {e.code}")
             raise e
         except URLError as e:
-            print(f"Could no find a server, which is associated "
+            print(f"LOG: Could no find a server, which is associated "
                   f"with the following url: {url}")
             raise e
         return BeautifulSoup(page.read(), "html.parser")

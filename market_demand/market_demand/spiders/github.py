@@ -5,11 +5,14 @@ import time
 from datetime import datetime
 from typing import Optional, Iterator, Dict, Any, List
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 from urllib.request import urlopen
 
 from bs4 import BeautifulSoup
 from scrapy import Spider, signals
+from scrapy.crawler import CrawlerProcess
 from scrapy.http import Response, Request
+from scrapy.utils.project import get_project_settings
 
 
 @dataclasses.dataclass
@@ -35,10 +38,11 @@ class GitHubTechnologyData:
 class GitHubTopicsSpider(Spider):
     __BASE_URL = "https://github.com"
     __SEARCH_QUERY_PATTERN: str = "https://github.com/search?p={page}&q={query}&type=Topics"
-    __MAX_PAGES_TO_CRAWL = 10
+    __MAX_PAGES_TO_CRAWL = 1
 
     __QUERY_ARG = "query"
     __DIR_ARG: str = "dir"
+    __HABR_DIR_ARG: str = "habr.dir"
 
     name: str = "github-topics"
 
@@ -60,11 +64,14 @@ class GitHubTopicsSpider(Spider):
             self.__path_to_csv_dir = None
             self.__path_to_failed_dir = None
 
+        self.__path_to_habr_dir = str(kwargs[GitHubTopicsSpider.__HABR_DIR_ARG]) \
+            if GitHubTopicsSpider.__HABR_DIR_ARG in kwargs.keys() else self.__path_to_dir
+
         self.__topic_data = list()
         self.__total_pages_to_parse = self.__parse_total_pages_num(self.__get_url())
         if self.__total_pages_to_parse > GitHubTopicsSpider.__MAX_PAGES_TO_CRAWL:
             self.__total_pages_to_parse = GitHubTopicsSpider.__MAX_PAGES_TO_CRAWL
-        print(f"Total pages to parse: {self.__total_pages_to_parse}")
+        print(f"LOG: Total pages to parse: {self.__total_pages_to_parse}")
 
     @classmethod
     def from_crawler(cls, crawler, *args, **kwargs):
@@ -81,7 +88,7 @@ class GitHubTopicsSpider(Spider):
         page = self.__retrieve_page_number_from_url(response.url)
         technologies = self.__parse_technologies(response.body)
         self.__topic_data.extend(technologies)
-        print(f"Processed page #{page}, added {len(technologies)} technologies, related to this topic. "
+        print(f"LOG: Processed page #{page}, added {len(technologies)} technologies, related to this topic. "
               f"Total is {len(self.__topic_data)}")
 
     # noinspection PyUnusedLocal
@@ -89,12 +96,20 @@ class GitHubTopicsSpider(Spider):
         if self.__path_to_csv_dir is not None:
             filename = f"{self.__path_to_csv_dir}/" \
                        f"{GitHubTopicsSpider.name}-results-{datetime.today().strftime('%Y-%m-%d')}.csv"
-            print(f"Writing {len(self.__topic_data)} records to csv file with name {filename}")
+            print(f"LOG: Writing {len(self.__topic_data)} records to csv file with name {filename}")
             with open(filename, 'w', encoding="UTF-8") as csv_file:
                 writer = csv.writer(csv_file)
                 writer.writerow(GitHubTechnologyData.CSV_COLUMNS)
                 writer.writerows([list(el.__iter__()) for el in self.__topic_data])
-        pass
+
+        scrapy_settings = get_project_settings()
+        crawler = CrawlerProcess(scrapy_settings)
+        for technology in self.__topic_data:
+            print(f"LOG: Parsing corresponding HabrHabr articles for technology: {technology.technology}")
+            crawler.crawl("habrahabr-articles",
+                          query=quote(technology.technology),
+                          dir=self.__path_to_habr_dir)
+        crawler.start(stop_after_crawl=True)
 
     def __get_url(self, page: int = 1) -> str:
         return GitHubTopicsSpider.__SEARCH_QUERY_PATTERN.format(page=page, query=self.__query)
@@ -115,9 +130,9 @@ class GitHubTopicsSpider(Spider):
         return [el for el in parsed_technologies if el is not None]
 
     def __parse_technology(self, link: str) -> Optional[GitHubTechnologyData]:
-        print(f"Started processing technology with url: {link}")
+        print(f"LOG: Started processing technology with url: {link}")
         actual_url = GitHubTopicsSpider.__BASE_URL + link
-        page = GitHubTopicsSpider.__open_page(actual_url)
+        page = self.__open_page(actual_url)
 
         try:
             technology = str(page.find("h1", class_="h1").contents[0]).strip()
@@ -131,8 +146,8 @@ class GitHubTopicsSpider(Spider):
             created_by = additional_data[0] if len(additional_data) >= 1 else None
             release_date = additional_data[1] if len(additional_data) >= 2 else None
 
-            created_by = None if release_date is None else created_by
-            release_date = None if created_by is None else release_date
+            created_by = None if release_date is None or len(release_date) == 0 else created_by
+            release_date = None if created_by is None or len(created_by) == 0 else release_date
 
             repositories = self.__retrieve_numbers_from_str(
                 str(page.find("h2", class_="h3 color-text-secondary").contents[0])
@@ -144,14 +159,14 @@ class GitHubTopicsSpider(Spider):
 
             data = GitHubTechnologyData(link, self.__query, technology,
                                         created_by, release_date, repositories)
-            print(f"Processed technology with url: {actual_url}. Parsed data: {data}")
+            print(f"LOG: Processed technology with url: {actual_url}. Parsed data: {data}")
             return data
         except Exception as ex:
-            print(f"Encountered following exception ({ex.__class__}) when attempting to parse data: {ex}")
+            print(f"LOG: Encountered following exception ({ex.__class__}) when attempting to parse data: {ex}")
             if self.__path_to_failed_dir is not None:
                 filename = f"{self.__path_to_failed_dir}/" \
                            f"{GitHubTopicsSpider.name}-failed-{link.replace('/', '-')}.html"
-                print(f"Saving failed to parse html to {filename}")
+                print(f"LOG: Saving failed to parse html to {filename}")
                 with open(filename, 'w', encoding="UTF-8") as f:
                     f.write(page.prettify())
             return None
@@ -170,14 +185,14 @@ class GitHubTopicsSpider(Spider):
         try:
             page = urlopen(url)
         except HTTPError as e:
-            print(f"Server returned the following HTTP error code while "
+            print(f"LOG: Server returned the following HTTP error code while "
                   f"performing a request to {e.url}: {e.code}")
             if e.code == 429 and not previously_failed:
                 time.sleep(30)
                 return GitHubTopicsSpider.__open_page(url, True)
             raise e
         except URLError as e:
-            print(f"Could no find a server, which is associated "
+            print(f"LOG: Could no find a server, which is associated "
                   f"with the following url: {url}")
             raise e
         return BeautifulSoup(page.read(), "html.parser")
