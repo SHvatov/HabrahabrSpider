@@ -5,7 +5,8 @@ from typing import Tuple, AnyStr, Set
 from person_extractor import Personality, extract_personalities_from_document
 from term_extractor import extract_terms_from_documents
 
-PATH_TO_TXT_DIR = r"D:\projects\scrapy-habr-parser\data\habr\txt"
+dirname = os.path.dirname(__file__)
+PATH_TO_TXT_DIR = os.path.join(dirname, '../data/habr/txt')
 
 
 def process_file(path: str) -> Tuple[AnyStr, Set[Personality]]:

@@ -72,7 +72,8 @@ class DocumentBuilder:
 # noinspection PyUnresolvedReferences
 def prepare_stop_words():
     import os
-    __PATH_TO_STOP_WORDS_DIR = r"D:\projects\scrapy-habr-parser\analyser\raw_stopwords"
+    dirname = os.path.dirname(__file__)
+    __PATH_TO_STOP_WORDS_DIR = os.path.join(dirname, 'raw_stopwords')
 
     stop_words = set()
     for file in os.scandir(__PATH_TO_STOP_WORDS_DIR):
