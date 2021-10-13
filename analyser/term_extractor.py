@@ -4,7 +4,7 @@ from typing import List, Set
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-from analyser.natasha_adapter import DocumentBuilder, MORPH_VOCAB, STOP_WORDS
+from natasha_adapter import DocumentBuilder, MORPH_VOCAB, STOP_WORDS
 
 
 @dataclasses.dataclass(frozen=True)
