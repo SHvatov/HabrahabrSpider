@@ -11,6 +11,8 @@ from natasha import (
     Doc
 )
 
+from nltk.corpus import stopwords
+
 EMB = NewsEmbedding()
 SEGMENTER = Segmenter()
 
@@ -65,3 +67,21 @@ class DocumentBuilder:
             document.parse_syntax(SYNTAX_PARSER)
 
         return document
+
+
+# noinspection PyUnresolvedReferences
+def prepare_stop_words():
+    import os
+    __PATH_TO_STOP_WORDS_DIR = r"D:\projects\scrapy-habr-parser\analyser\raw_stopwords"
+
+    stop_words = set()
+    for file in os.scandir(__PATH_TO_STOP_WORDS_DIR):
+        if file.is_file() and file.path.endswith(".txt"):
+            with open(file.path, 'r', encoding='UTF-8') as txt_file:
+                for word in txt_file.readlines():
+                    stop_words.add(word.strip().lower())
+
+    return stop_words.union(stopwords.words('russian'))
+
+
+STOP_WORDS = prepare_stop_words()

@@ -42,7 +42,7 @@ class HabrahabrArticleData:
 class HabrahabrArticlesSpider(Spider):
     __BASE_URL: str = "https://habr.com"
     __SEARCH_QUERY: str = "ru/search"
-    __MAX_PAGES_TO_CRAWL = 1
+    __MAX_PAGES_TO_CRAWL = 10
 
     __QUERY_ARG: str = "query"
     __DIR_ARG: str = "dir"

@@ -1,20 +1,18 @@
 import os
 from collections import Counter
-from typing import Set
+from typing import Tuple, AnyStr, Set
 
-from person_extractor import extract_personalities, Personality
+from person_extractor import Personality, extract_personalities_from_document
+from term_extractor import extract_terms_from_documents
 
-PATH_TO_TXT_DIR = r"D:\projects\scrapy-habr-parser\data\txt"
-
-
-def process_text(text: str) -> Set[Personality]:
-    return extract_personalities(text)
+PATH_TO_TXT_DIR = r"D:\projects\scrapy-habr-parser\data\habr\txt"
 
 
-def process_file(path: str) -> Set[Personality]:
+def process_file(path: str) -> Tuple[AnyStr, Set[Personality]]:
     print(f"Processing file: {path}\n")
     with open(path, "r", encoding="UTF-8") as file:
-        return process_text(" ".join(file.readlines()))
+        text = " ".join(file.readlines())
+        return text, extract_personalities_from_document(text)
 
 
 # noinspection PyUnresolvedReferences
@@ -22,13 +20,20 @@ def process_dir() -> None:
     print(f"Started processing files in the following dir: {PATH_TO_TXT_DIR}")
 
     personalities = list()
-    processed_files = 0
+    processed_files = list()
     for file in os.scandir(PATH_TO_TXT_DIR):
         if file.is_file() and file.path.endswith(".txt"):
-            personalities.extend(process_file(file.path))
-            processed_files += 1
+            t, p = process_file(file.path)
+            processed_files.append(t)
+            personalities.append(p)
+            # break  # process only first for testing
 
-    print(f"Processed all files in directory: {PATH_TO_TXT_DIR}. Total files: {processed_files}")
+    terms = extract_terms_from_documents(processed_files)
+    print(f"Processed all files in directory: {PATH_TO_TXT_DIR}. Total files: {len(processed_files)}")
+    print(f"Total personalities extracted: {len(personalities)}")
+    print(f"Total tokens extracted: {len(terms)}")
+
+    print(sorted(terms, reverse=True, key=lambda _: _.average_tfidf)[0:30])
 
     counter = Counter(personalities)
     print(f"Extracted personalities: {counter.most_common(30)}")
