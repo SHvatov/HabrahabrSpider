@@ -15,11 +15,11 @@ class TermData:
 
 def preprocess_token(token: str) -> str:
     modified_token = token.lower()
-    if 'токен' in modified_token:
-        modified_token = modified_token[:modified_token.find('токен')] + 'токен'
-
-    if 'блокчейн' in modified_token:
-        modified_token = modified_token[:modified_token.find('блокчейн')] + 'блокчейн'
+    # if 'токен' in modified_token:
+    #     modified_token = modified_token[:modified_token.find('токен')] + 'токен'
+    #
+    # if 'блокчейн' in modified_token:
+    #     modified_token = modified_token[:modified_token.find('блокчейн')] + 'блокчейн'
 
     return modified_token
 
