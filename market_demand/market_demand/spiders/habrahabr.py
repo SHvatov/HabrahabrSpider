@@ -172,7 +172,7 @@ class HabrahabrArticlesSpider(Spider):
             # save text to corresponding file if flag is set to true
             if self.__save_text:
                 # noinspection PyArgumentList
-                text = page.find("div", class_="article-formatted-body").get_text(separator=" ", strip=True)
+                text = page.find("div", class_="article-formatted-body").get_text(separator=". ", strip=True)
                 if self.__path_to_txt_dir is not None:
                     filename = f"{self.__path_to_txt_dir}/" \
                                f"{HabrahabrArticlesSpider.name}-text-{link.replace('/', '-')}.txt"
