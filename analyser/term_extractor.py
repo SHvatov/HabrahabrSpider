@@ -44,7 +44,7 @@ def extract_terms_from_documents(texts: List[str]) -> Set[TermData]:
     texts_tfidf_matrix = vectorizer.fit_transform(preprocessed_texts)
 
     # id2word = {index: row for index, row in enumerate(vectorizer.get_feature_names_out())}
-    df = pd.DataFrame(texts_tfidf_matrix.toarray(), columns=vectorizer.get_feature_names_out())
+    df = pd.DataFrame(texts_tfidf_matrix.toarray(), columns=vectorizer.get_feature_names())
 
     term_data = set()
     for token, tfidf in df.mean(axis=0).iteritems():
