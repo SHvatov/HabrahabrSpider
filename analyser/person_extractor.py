@@ -192,11 +192,11 @@ def extract_personalities_from_document(text: str) -> Set[Personality]:
                       f"thus this personality will be skipped\n")
                 continue
 
-            if any([str(wiki_personality).lower().count(t.lower()) == 0 for t in personality.split(' ')]):
-                actual_personalities.add(UnverifiedPersonality(personality))
-                print("Found wikipedia personality that does not match the actual one, "
-                      "thus it will be added as unverified one.\n")
-                continue
+            # if any([str(wiki_personality).lower().count(t.lower()) == 0 for t in personality.split(' ')]):
+            #     actual_personalities.add(UnverifiedPersonality(personality))
+            #     print("Found wikipedia personality that does not match the actual one, "
+            #           "thus it will be added as unverified one.\n")
+            #     continue
 
             if personality_type is not None:
                 actual_wiki_personality = WikiPersonality(page.title, page.url, personality_type)
