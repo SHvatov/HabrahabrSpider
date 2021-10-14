@@ -26,7 +26,7 @@ def process_dir() -> None:
         if file.is_file() and file.path.endswith(".txt"):
             t, p = process_file(file.path)
             processed_files.append(t)
-            personalities.append(p)
+            personalities.extend(p)
             # break  # process only first for testing
 
     terms = extract_terms_from_documents(processed_files)
@@ -37,10 +37,9 @@ def process_dir() -> None:
     print(sorted(terms, reverse=True, key=lambda _: _.average_tfidf)[0:30])
 
     counter = Counter(personalities)
-    print(f"Extracted personalities: {counter.most_common(30)}")
+    print(f"Top-10 Extracted personalities: {counter.most_common(10)}")
 
     # required to build word cloud
-    print('; '.join([_.fullname for _ in personalities]), end='\n\n')
     for p, c in counter.items():
         print(f'{p.fullname};{c}')
 
