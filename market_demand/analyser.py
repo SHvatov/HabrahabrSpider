@@ -176,6 +176,9 @@ def main():
             writer.writerow(TechnologyStats.CSV_COLUMNS)
             writer.writerows([list(el.__iter__()) for el in technology_stats])
 
+        # noinspection PyUnresolvedReferences
+        reactor.stop()
+
     crawl_and_analyse()
 
     # noinspection PyUnresolvedReferences
