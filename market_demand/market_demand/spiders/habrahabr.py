@@ -1,5 +1,6 @@
 import csv
 import re
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Iterator, Any, Optional, Set, Dict, List
@@ -42,7 +43,7 @@ class HabrahabrArticleData:
 class HabrahabrArticlesSpider(Spider):
     __BASE_URL: str = "https://habr.com"
     __SEARCH_QUERY: str = "ru/search"
-    __MAX_PAGES_TO_CRAWL = 1
+    __MAX_PAGES_TO_CRAWL = 10
 
     __QUERY_ARG: str = "query"
     __DIR_ARG: str = "dir"
@@ -101,7 +102,7 @@ class HabrahabrArticlesSpider(Spider):
                    f"{HabrahabrArticlesSpider.name}-" \
                    f"{self.__query}-results-{datetime.today().strftime('%Y-%m-%d')}.csv"
         print(f"LOG: Writing {len(self.__articles_data)} records to csv file with name {filename}")
-        with open(filename, 'w', encoding="UTF-8") as csv_file:
+        with open(filename, 'w', encoding="UTF-8", newline='') as csv_file:
             writer = csv.writer(csv_file)
             writer.writerow(HabrahabrArticleData.CSV_COLUMNS)
             writer.writerows([list(el.__iter__()) for el in self.__articles_data])
@@ -200,10 +201,12 @@ class HabrahabrArticlesSpider(Spider):
     def __retrieve_page_number_from_url(url: str) -> int:
         return int(url[url.find("page") + len("page"):url.find('q') - 2])
 
+    # noinspection PyBroadException
     @staticmethod
-    def __open_page(url) -> BeautifulSoup:
+    def __open_page(url: str, previously_failed: bool = False) -> BeautifulSoup:
         try:
             page = urlopen(url)
+            return BeautifulSoup(page.read(), "html.parser")
         except HTTPError as e:
             print(f"LOG: Server returned the following HTTP error code while "
                   f"performing a request to {e.url}: {e.code}")
@@ -212,7 +215,15 @@ class HabrahabrArticlesSpider(Spider):
             print(f"LOG: Could no find a server, which is associated "
                   f"with the following url: {url}")
             raise e
-        return BeautifulSoup(page.read(), "html.parser")
+        except:
+            if not previously_failed:
+                print(f"LOG: Unknown exception has occurred while requesting {url}. "
+                      f"Second attempt will be made in 30 seconds")
+                time.sleep(30)
+                return HabrahabrArticlesSpider.__open_page(url, True)
+            else:
+                print(f"LOG: Unknown exception has occurred while requesting {url}")
+                raise
 
     @staticmethod
     def __parse_total_pages_num(url: str) -> int:

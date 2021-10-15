@@ -10,15 +10,13 @@ from urllib.request import urlopen
 
 from bs4 import BeautifulSoup
 from scrapy import Spider, signals
-from scrapy.crawler import CrawlerProcess
 from scrapy.http import Response, Request
-from scrapy.utils.project import get_project_settings
 
 
 @dataclasses.dataclass
 class GitHubTechnologyData:
     CSV_COLUMNS = ["Link", "Global topic", "Technology name",
-                   "Created by", "Released", "Total repositories"]
+                   "Created by", "Released", "Total repositories", "Path to file"]
 
     link: str
     topic: str
@@ -28,9 +26,12 @@ class GitHubTechnologyData:
     release_date: Optional[str]
     repositories: int
 
+    path_to_data: Optional[str]
+
     def __iter__(self):
         return [self.link, self.topic, self.technology,
-                self.created_by, str(self.release_date), self.repositories]
+                self.created_by, str(self.release_date),
+                self.repositories, self.path_to_data]
 
 
 # noinspection DuplicatedCode
@@ -38,11 +39,11 @@ class GitHubTechnologyData:
 class GitHubTopicsSpider(Spider):
     __BASE_URL = "https://github.com"
     __SEARCH_QUERY_PATTERN: str = "https://github.com/search?p={page}&q={query}&type=Topics"
-    __MAX_PAGES_TO_CRAWL = 1
+    __MAX_PAGES_TO_CRAWL = 3
 
     __QUERY_ARG = "query"
     __DIR_ARG: str = "dir"
-    __HABR_DIR_ARG: str = "habr.dir"
+    __HABR_DIR_ARG: str = "habr_dir"
 
     name: str = "github-topics"
 
@@ -97,19 +98,10 @@ class GitHubTopicsSpider(Spider):
             filename = f"{self.__path_to_csv_dir}/" \
                        f"{GitHubTopicsSpider.name}-results-{datetime.today().strftime('%Y-%m-%d')}.csv"
             print(f"LOG: Writing {len(self.__topic_data)} records to csv file with name {filename}")
-            with open(filename, 'w', encoding="UTF-8") as csv_file:
+            with open(filename, 'w', encoding="UTF-8", newline='') as csv_file:
                 writer = csv.writer(csv_file)
                 writer.writerow(GitHubTechnologyData.CSV_COLUMNS)
                 writer.writerows([list(el.__iter__()) for el in self.__topic_data])
-
-        scrapy_settings = get_project_settings()
-        crawler = CrawlerProcess(scrapy_settings)
-        for technology in self.__topic_data:
-            print(f"LOG: Parsing corresponding HabrHabr articles for technology: {technology.technology}")
-            crawler.crawl("habrahabr-articles",
-                          query=quote(technology.technology),
-                          dir=self.__path_to_habr_dir)
-        crawler.start(stop_after_crawl=True)
 
     def __get_url(self, page: int = 1) -> str:
         return GitHubTopicsSpider.__SEARCH_QUERY_PATTERN.format(page=page, query=self.__query)
@@ -157,8 +149,13 @@ class GitHubTopicsSpider(Spider):
             else:
                 repositories = repositories[0]
 
+            # the same filename as in the habrahabr parser
+            filename = f"{self.__path_to_habr_dir}/csv/" \
+                       f"habrahabr-articles-" \
+                       f"{quote(technology)}-results-{datetime.today().strftime('%Y-%m-%d')}.csv"
             data = GitHubTechnologyData(link, self.__query, technology,
-                                        created_by, release_date, repositories)
+                                        created_by, release_date, repositories,
+                                        filename)
             print(f"LOG: Processed technology with url: {actual_url}. Parsed data: {data}")
             return data
         except Exception as ex:

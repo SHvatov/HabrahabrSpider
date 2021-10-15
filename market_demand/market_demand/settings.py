@@ -34,6 +34,7 @@ ROBOTSTXT_OBEY = False
 
 # Disable Telnet Console (enabled by default)
 # TELNETCONSOLE_ENABLED = False
+TELNETCONSOLE_PORT = None
 
 # Override the default request headers:
 # DEFAULT_REQUEST_HEADERS = {
