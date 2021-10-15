@@ -2,25 +2,27 @@ import csv
 import re
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, date
 from typing import Iterator, Any, Optional, Set, Dict, List
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 from bs4 import BeautifulSoup
+from dateutil.parser import isoparse
 from scrapy import Spider, Request, signals
 from scrapy.http import Response
 
 
 @dataclass
 class HabrahabrArticleData:
-    CSV_COLUMNS = ["Link", "Tags", "Hubs", "Unique user", "Company name", "Username",
+    CSV_COLUMNS = ["Link", "Tags", "Hubs", "Publication date", "Unique user", "Company name", "Username",
                    "Number of comments", "Number of positive votes", "Number of negative votes",
                    "Number of views", "Number of bookmarks"]
 
     link: str  # unique identifier of the article
     tags: Set[str]  # list of associated tags
     hubs: Set[str]  # list of associated hubs
+    publication_date: date
 
     is_unique_user: bool  # whether this article is provided by a unique user or a company
     company: Optional[str]  # company which created this post
@@ -34,7 +36,7 @@ class HabrahabrArticleData:
 
     def __iter__(self):
         return [self.link, ",".join(self.tags), ",".join(self.hubs),
-                self.is_unique_user, self.company, self.user,
+                self.publication_date, self.is_unique_user, self.company, self.user,
                 self.comments, self.positive_votes, self.negative_votes,
                 self.views, self.bookmarks]
 
@@ -43,11 +45,11 @@ class HabrahabrArticleData:
 class HabrahabrArticlesSpider(Spider):
     __BASE_URL: str = "https://habr.com"
     __SEARCH_QUERY: str = "ru/search"
-    __MAX_PAGES_TO_CRAWL = 10
+    __MAX_PAGES_TO_CRAWL = 1
 
     __QUERY_ARG: str = "query"
     __DIR_ARG: str = "dir"
-    __SAVE_TEXT: str = "save.text"
+    __SAVE_TEXT: str = "save_text"
 
     name: str = "habrahabr-articles"
 
@@ -111,7 +113,8 @@ class HabrahabrArticlesSpider(Spider):
         return f"{HabrahabrArticlesSpider.__BASE_URL}/" \
                f"{HabrahabrArticlesSpider.__SEARCH_QUERY}/" \
                f"page{page}/" \
-               f"?q={self.__query}"
+               f"?q={self.__query}" \
+               f"&target_type=posts&order=date"
 
     def __parse_articles(self, body: str) -> List[HabrahabrArticleData]:
         page = BeautifulSoup(body, "html.parser")
@@ -149,8 +152,7 @@ class HabrahabrArticlesSpider(Spider):
             total_votes = page.find("span", class_="tm-votes-meter__value")
             if total_votes.has_attr("title"):
                 total_votes_title = total_votes["title"]
-                _, positive_votes, negative_votes = self.__retrieve_numbers_from_str(
-                    total_votes_title)
+                _, positive_votes, negative_votes = self.__retrieve_numbers_from_str(total_votes_title)
             else:
                 positive_votes = negative_votes = 0
 
@@ -163,8 +165,11 @@ class HabrahabrArticlesSpider(Spider):
                 views = int(views_str)
 
             bookmarks = int(page.find("span", class_="bookmarks-button__counter").string)
+            publication_date = page.find("span", class_="tm-article-snippet__datetime-published").find("time")
+            publication_date = isoparse(str(publication_date["datetime"]))
+
             data = HabrahabrArticleData(
-                link, tags, hubs,
+                link, tags, hubs, publication_date.date(),
                 is_unique_user, company, user,
                 comments, positive_votes, negative_votes,
                 views, bookmarks

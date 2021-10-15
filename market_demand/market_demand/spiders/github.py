@@ -39,7 +39,7 @@ class GitHubTechnologyData:
 class GitHubTopicsSpider(Spider):
     __BASE_URL = "https://github.com"
     __SEARCH_QUERY_PATTERN: str = "https://github.com/search?p={page}&q={query}&type=Topics"
-    __MAX_PAGES_TO_CRAWL = 3
+    __MAX_PAGES_TO_CRAWL = 1
 
     __QUERY_ARG = "query"
     __DIR_ARG: str = "dir"

@@ -2,10 +2,11 @@ import csv
 import dataclasses
 import itertools
 import os
-from datetime import datetime
+from datetime import date, datetime
 from typing import Set, List
 from urllib.parse import quote
 
+from dateutil.parser import isoparse
 from scrapy.crawler import CrawlerRunner
 from scrapy.utils.log import configure_logging
 from scrapy.utils.project import get_project_settings
@@ -22,7 +23,7 @@ PATH_TO_RESULTS_DIR = os.path.join(dirname, '../data/results')
 PATH_TO_GITHUB_CSV_DIR = os.path.join(PATH_TO_GITHUB_DATA_DIR, './csv')
 
 TECHNOLOGY = "JavaScript"
-
+MAX_DAYS_PASSED_SINCE_PUBLISHING = 365 * 4
 
 @dataclasses.dataclass
 class CompanyStats:
@@ -121,14 +122,19 @@ def main():
             with open(technology.path_to_data, 'r', newline='', encoding="UTF-8") as csv_file:
                 reader = csv.reader(csv_file)
                 next(reader, None)
-                for link, tags, hubs, unique, company, user, comments, pos_votes, neg_votes, views, bookmarks in reader:
+                for link, tags, hubs, publ_date, unq, cmpny, user, cmnts, pos_v, neg_v, views, bkmrks in reader:
+                    publication_date = isoparse(publ_date)
+                    if (date.today() - publication_date.date()).days >= MAX_DAYS_PASSED_SINCE_PUBLISHING:
+                        print(f"Skipping article {link} because it is too old. Published {publication_date}")
+                        continue
+
                     articles.append(
                         HabrahabrArticleData(
                             link, set(str(tags).replace('\"', '').lower().split(',')),
-                            set(str(hubs).replace('\"', '').split(',')),
-                            unique == 'True', company, user,
-                            int(comments), int(pos_votes), int(neg_votes),
-                            int(views), int(bookmarks)
+                            set(str(hubs).replace('\"', '').split(',')), publication_date.date(),
+                            unq == 'True', cmpny, user,
+                            int(cmnts), int(pos_v), int(neg_v),
+                            int(views), int(bkmrks)
                         )
                     )
             articles_data_to_tech_id[index] = articles
